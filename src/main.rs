@@ -1,5 +1,8 @@
+mod cors;
 mod db;
+mod error;
 mod schema;
+mod user_management;
 
 #[macro_use]
 extern crate rocket;
@@ -9,44 +12,33 @@ extern crate dotenv;
 #[macro_use]
 extern crate diesel_migrations;
 
-use self::diesel::prelude::*;
+use cors::CORS;
 use db::establish_connection;
-use rocket::serde::json::Json;
-use rocket::State;
-use schema::users;
+use user_management::UserSession;
 
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
 }
 
-#[get("/users")]
-fn get_users(pool: &State<db::Pool>) -> Json<Vec<String>> {
-    let conn = pool.get().expect("migration connection failure");
-
-    let results = users::table
-        .limit(5)
-        .load::<User>(&conn)
-        .expect("Error loading users");
-
-    let names = results.into_iter().map(|x| x.username).collect::<Vec<_>>();
-
-    Json(names)
-}
-
-#[derive(Queryable)]
-pub struct User {
-    pub id: i32,
-    pub username: String,
-}
-
 #[launch]
-fn rocket() -> _ {
+async fn rocket() -> _ {
     dotenv::dotenv().ok();
 
     let pool = establish_connection();
 
     rocket::build()
+        .attach(CORS)
         .manage(pool)
-        .mount("/", routes![index, get_users])
+        .manage(UserSession::new())
+        .mount("/", routes![index])
+        .mount(
+            "/api/v1/",
+            routes![
+                index,
+                crate::user_management::get_users,
+                crate::user_management::login,
+                crate::user_management::check_login
+            ],
+        )
 }
