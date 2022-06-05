@@ -2,17 +2,27 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Mutex;
 
+use crate::error::{ApiErrorResponse, ErrorResponse};
 use crate::schema::users;
 use crate::{db, schema};
 use diesel::prelude::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Debug)]
 pub struct User {
+    pub id: i32,
+    pub sub: String,
+    pub username: String,
+    pub email: String,
+}
+
+#[derive(Serialize)]
+pub struct UserOut {
     pub id: i32,
     pub sub: String,
     pub username: String,
@@ -47,20 +57,21 @@ impl UserSession {
 }
 
 #[get("/users")]
-pub(crate) fn get_users(pool: &State<db::Pool>) -> Json<Vec<String>> {
-    let conn = pool.get().expect("db connection failure");
+pub(crate) fn get_users(pool: &State<db::Pool>) -> Result<Json<Vec<String>>, ApiErrorResponse> {
+    let conn = pool
+        .get()
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't connect to database"))?;
 
-    let results = users::table
-        .limit(5)
-        .load::<User>(&conn)
-        .expect("Error loading users");
+    let users = users::table.limit(5).load::<User>(&conn).map_err(|_| {
+        ErrorResponse::new(Status { code: 500 }, "Couldn't load users from database")
+    })?;
 
-    let names = results.into_iter().map(|x| x.username).collect::<Vec<_>>();
+    let names = users.into_iter().map(|x| x.username).collect::<Vec<_>>();
 
-    Json(names)
+    Ok(Json(names))
 }
 
-fn generate_token() -> String {
+fn generate_session_key() -> String {
     const LEN: usize = 32;
 
     thread_rng()
@@ -75,43 +86,42 @@ pub(crate) async fn login(
     token: String,
     tokens: &State<UserSession>,
     pool: &State<db::Pool>,
-) -> String {
+) -> Result<String, ApiErrorResponse<'static>> {
     let client_id = "513324624986-fn538769dc89nlp075t083h03ihnjldi.apps.googleusercontent.com";
     let parser = jsonwebtoken_google::Parser::new(client_id);
-    let claims = parser.parse::<TokenClaims>(&token).await;
+    let claims = parser.parse::<TokenClaims>(&token).await.map_err(|_| {
+        ErrorResponse::new(Status { code: 500 }, "Couldn't validate Google account")
+    })?;
 
-    match claims {
-        Ok(claims) => {
-            let conn = match pool.get() {
-                Ok(conn) => conn,
-                Err(err) => return err.to_string(),
-            };
+    let conn = pool
+        .get()
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't connect to database"))?;
 
-            let new_user = NewUser {
-                sub: claims.sub.clone(),
-                email: claims.email,
-                username: claims.name,
-            };
+    let new_user = NewUser {
+        sub: claims.sub.clone(),
+        email: claims.email,
+        username: claims.name,
+    };
 
-            use schema::users::dsl::*;
+    use schema::users::dsl::*;
 
-            diesel::insert_into(users)
-                .values(&new_user)
-                .on_conflict(sub)
-                .do_update()
-                .set(&new_user)
-                .get_result::<User>(&conn)
-                .unwrap();
+    diesel::insert_into(users)
+        .values(&new_user)
+        .on_conflict(sub)
+        .do_update()
+        .set(&new_user)
+        .get_result::<User>(&conn)
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't update user"))?;
 
-            let mut tokens = tokens.sessions.lock().unwrap();
-            let token = generate_token();
+    let mut sessions = tokens
+        .sessions
+        .lock()
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't update user session"))?;
+    let session_key = generate_session_key();
 
-            tokens.insert(token.clone(), claims.sub);
+    sessions.insert(session_key.clone(), claims.sub);
 
-            token
-        }
-        Err(err) => err.to_string(),
-    }
+    Ok(session_key)
 }
 
 #[post("/check_login", data = "<session>")]
@@ -119,30 +129,37 @@ pub(crate) async fn check_login(
     session: String,
     sessions: &State<UserSession>,
     pool: &State<db::Pool>,
-) -> String {
-    match sessions.sessions.lock().unwrap().get(&session) {
-        Some(token) => {
-            let conn = match pool.get() {
-                Ok(conn) => conn,
-                Err(err) => return err.to_string(),
-            };
+) -> Result<Json<UserOut>, ApiErrorResponse<'static>> {
+    let sessions = sessions
+        .sessions
+        .lock()
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't get user sessions"))?;
 
-            use schema::users::dsl::*;
+    let user_id = sessions
+        .get(&session)
+        .ok_or_else(|| ErrorResponse::new(Status { code: 401 }, "No session found"))?;
 
-            match users
-                .filter(sub.eq(token))
-                .load::<User>(&conn)
-                .unwrap()
-                .first()
-            {
-                Some(user) => {
-                    println!("Loaded {:?}", user);
+    let conn = pool
+        .get()
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't connect to database"))?;
 
-                    "valid".to_string()
-                }
-                None => "user not found".to_string(),
-            }
-        }
-        None => "invalid".to_string(),
-    }
+    use schema::users::dsl::*;
+
+    let user_vec = users
+        .filter(sub.eq(user_id))
+        .load::<User>(&conn)
+        .map_err(|_| {
+            ErrorResponse::new(Status { code: 500 }, "Couldn't load user from database")
+        })?;
+
+    let user = user_vec
+        .first()
+        .ok_or_else(|| ErrorResponse::new(Status { code: 401 }, "User not in database"))?;
+
+    Ok(Json(UserOut {
+        id: user.id,
+        sub: user.sub.clone(),
+        username: user.username.clone(),
+        email: user.email.clone(),
+    }))
 }
