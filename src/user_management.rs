@@ -150,27 +150,6 @@ struct SessionCookie {
     creation_time: SystemTime,
 }
 
-#[get("/users")]
-pub(crate) fn get_users(pool: &State<db::Pool>) -> Result<Json<Vec<String>>, ErrorResponse> {
-    let conn = pool.get().map_err(|_| {
-        ErrorResponse::new(
-            Status { code: 500 },
-            "Couldn't connect to database".to_string(),
-        )
-    })?;
-
-    let users = users::table.limit(5).load::<User>(&conn).map_err(|_| {
-        ErrorResponse::new(
-            Status { code: 500 },
-            "Couldn't load users from database".to_string(),
-        )
-    })?;
-
-    let names = users.into_iter().map(|x| x.username).collect::<Vec<_>>();
-
-    Ok(Json(names))
-}
-
 fn generate_session_key() -> String {
     const LEN: usize = 32;
 

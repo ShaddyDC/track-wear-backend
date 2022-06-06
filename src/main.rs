@@ -33,7 +33,6 @@ async fn rocket() -> _ {
             "/api/v1/",
             routes![
                 index,
-                crate::user_management::get_users,
                 crate::user_management::login,
                 crate::user_management::check_login,
                 crate::user_management::check_login_unauthorised,
