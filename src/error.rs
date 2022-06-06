@@ -7,20 +7,25 @@ use rocket::{
 };
 use serde::Serialize;
 
-#[derive(Serialize)]
-pub(crate) struct ApiError<'a> {
-    err: &'a str,
+#[derive(Serialize, Debug)]
+pub struct ApiError {
+    err: String,
 }
 
-pub(crate) struct ErrorResponse<T> {
+impl ApiError {
+    pub(crate) fn new(err: String) -> ApiError {
+        ApiError { err }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ErrorResponse<T = ApiError> {
     json: Json<T>,
     status: Status,
 }
 
-pub(crate) type ApiErrorResponse<'a> = ErrorResponse<ApiError<'a>>;
-
-impl ErrorResponse<ApiError<'_>> {
-    pub(crate) fn new(status: Status, err: &str) -> ErrorResponse<ApiError> {
+impl ErrorResponse<ApiError> {
+    pub(crate) fn new(status: Status, err: String) -> ErrorResponse<ApiError> {
         ErrorResponse {
             json: Json(ApiError { err }),
             status,

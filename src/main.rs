@@ -38,7 +38,8 @@ async fn rocket() -> _ {
                 index,
                 crate::user_management::get_users,
                 crate::user_management::login,
-                crate::user_management::check_login
+                crate::user_management::check_login,
+                crate::user_management::check_login_unauthorised,
             ],
         )
 }
