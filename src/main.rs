@@ -1,4 +1,3 @@
-mod cors;
 mod db;
 mod error;
 mod schema;
@@ -12,7 +11,6 @@ extern crate dotenv;
 #[macro_use]
 extern crate diesel_migrations;
 
-use cors::CORS;
 use db::establish_connection;
 use user_management::UserSession;
 
@@ -28,7 +26,6 @@ async fn rocket() -> _ {
     let pool = establish_connection();
 
     rocket::build()
-        .attach(CORS)
         .manage(pool)
         .manage(UserSession::new())
         .mount("/", routes![index])
