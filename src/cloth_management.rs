@@ -3,6 +3,7 @@ use std::fs::{self, File};
 
 use crate::error::ErrorResponse;
 use crate::schema::clothes;
+use crate::schema::wears;
 use crate::user_management::UserOut;
 use crate::{db, schema};
 use diesel::prelude::*;
@@ -38,6 +39,13 @@ pub struct ClothOut {
     pub id: i32,
     pub user_id: i32,
     pub cloth_name: String,
+    pub count: i32,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[table_name = "wears"]
+struct NewWear {
+    cloth_id: i32,
 }
 
 #[post("/create_cloth", data = "<form_cloth>")]
@@ -85,6 +93,7 @@ pub(crate) async fn create_cloth(
         id: cloth.id,
         user_id: cloth.user_id,
         cloth_name: cloth.cloth_name,
+        count: 0,
     }))
 }
 
@@ -109,22 +118,36 @@ pub(crate) async fn get_clothes(
             ErrorResponse::new(Status { code: 500 }, "Couldn't load clothes".to_string())
         })?;
 
+    use schema::wears::dsl::*;
+
     let out = list
         .into_iter()
-        .map(|cloth| ClothOut {
-            id: cloth.id,
-            user_id: cloth.user_id,
-            cloth_name: cloth.cloth_name,
+        .map(|cloth| {
+            let count = wears
+                .filter(cloth_id.eq(cloth.id))
+                .count()
+                .get_result(&conn)
+                .map(|val: i64| val as i32)
+                .map_err(|_| {
+                    ErrorResponse::new(Status { code: 404 }, "Couldn't get wear count".to_string())
+                })?;
+
+            Ok(ClothOut {
+                id: cloth.id,
+                user_id: cloth.user_id,
+                cloth_name: cloth.cloth_name,
+                count,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(out))
 }
 
-#[get("/cloth/<cloth_id>")]
+#[get("/cloth/<cloth>")]
 pub(crate) async fn get_cloth(
     user: UserOut,
-    cloth_id: i32,
+    cloth: i32,
     pool: &State<db::Pool>,
 ) -> Result<Json<ClothOut>, ErrorResponse> {
     let conn = pool.get().map_err(|_| {
@@ -137,8 +160,11 @@ pub(crate) async fn get_cloth(
     use schema::clothes::dsl::*;
 
     let list = clothes
-        .filter(user_id.eq(user.id).and(id.eq(cloth_id)))
-        .filter(id.eq(cloth_id))
+        .filter(
+            user_id
+                .eq(user.id)
+                .and(schema::clothes::columns::id.eq(cloth)),
+        )
         .load::<Cloth>(&conn)
         .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string()))?;
 
@@ -146,10 +172,22 @@ pub(crate) async fn get_cloth(
         ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
     })?;
 
+    use schema::wears::dsl::*;
+
+    let count = wears
+        .filter(cloth_id.eq(cloth.id))
+        .count()
+        .get_result(&conn)
+        .map(|val: i64| val as i32)
+        .map_err(|_| {
+            ErrorResponse::new(Status { code: 404 }, "Couldn't get wear count".to_string())
+        })?;
+
     Ok(Json(ClothOut {
         id: cloth.id,
         user_id: cloth.user_id,
         cloth_name: cloth.cloth_name.clone(),
+        count,
     }))
 }
 
@@ -170,7 +208,6 @@ pub(crate) async fn delete_cloth(
 
     let list = clothes
         .filter(user_id.eq(user.id).and(id.eq(cloth_id)))
-        .filter(id.eq(cloth_id))
         .load::<Cloth>(&conn)
         .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string()))?;
 
@@ -200,4 +237,49 @@ pub(crate) async fn delete_cloth(
 pub(crate) async fn get_cloth_image(_name: UserOut, cloth_id: u32) -> Option<File> {
     let filename = format!("runtime/images/{}", cloth_id);
     File::open(&filename).ok()
+}
+
+#[post("/cloth/<cloth>/add_wear")]
+pub(crate) fn add_wear(
+    cloth: i32,
+    user: UserOut,
+    pool: &State<db::Pool>,
+) -> Result<(), ErrorResponse> {
+    let conn = pool.get().map_err(|_| {
+        ErrorResponse::new(
+            Status { code: 500 },
+            "Couldn't connect to database".to_string(),
+        )
+    })?;
+
+    use schema::clothes::dsl::*;
+
+    let list = clothes
+        .filter(
+            user_id
+                .eq(user.id)
+                .and(schema::clothes::columns::id.eq(cloth)),
+        )
+        .load::<Cloth>(&conn)
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string()))?;
+
+    list.first().ok_or_else(|| {
+        ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
+    })?;
+
+    use schema::wears::dsl::*;
+
+    let wear = NewWear { cloth_id: cloth };
+
+    diesel::insert_into(wears)
+        .values(&wear)
+        .execute(&conn)
+        .map_err(|err| {
+            ErrorResponse::new(
+                Status { code: 500 },
+                format!("Couldn't update wear: {}", err),
+            )
+        })?;
+
+    Ok(())
 }

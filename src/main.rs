@@ -42,6 +42,7 @@ async fn rocket() -> _ {
                 crate::cloth_management::get_cloth,
                 crate::cloth_management::delete_cloth,
                 crate::cloth_management::get_cloth_image,
+                crate::cloth_management::add_wear,
             ],
         )
 }
