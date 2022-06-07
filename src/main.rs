@@ -12,7 +12,8 @@ extern crate dotenv;
 #[macro_use]
 extern crate diesel_migrations;
 
-use db::establish_connection;
+use db::{run_db_migrations, DbConn};
+use rocket::fairing::AdHoc;
 use user_management::UserSession;
 
 #[get("/")]
@@ -24,10 +25,9 @@ fn index() -> &'static str {
 async fn rocket() -> _ {
     dotenv::dotenv().ok();
 
-    let pool = establish_connection();
-
     rocket::build()
-        .manage(pool)
+        .attach(DbConn::fairing())
+        .attach(AdHoc::on_ignite("Run Migrations", run_db_migrations))
         .manage(UserSession::new())
         .mount("/", routes![index])
         .mount(

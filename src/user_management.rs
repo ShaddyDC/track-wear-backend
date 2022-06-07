@@ -3,9 +3,10 @@ use std::fmt::Debug;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
+use crate::db::DbConn;
 use crate::error::{ApiError, ErrorResponse};
+use crate::schema;
 use crate::schema::users;
-use crate::{db, schema};
 use diesel::prelude::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -112,24 +113,23 @@ impl<'r> FromRequest<'r> for UserOut {
             .clone()
         };
 
-        let pool = try_outcome!(req.guard::<&State<db::Pool>>().await.map_failure(|_| {
+        let conn = try_outcome!(req.guard::<DbConn>().await.map_failure(|_| {
             (
                 Status { code: 500 },
-                ApiError::new("Couldn't get database pool".to_string()),
+                ApiError::new("Couldn't get database connection".to_string()),
             )
         }));
-        let conn = try_outcome!(pool
-            .get()
-            .map_err(|_| ApiError::new("Couldn't connect to database".to_string()))
-            .or_forward(()));
 
         use schema::users::dsl::*;
 
-        let user_vec = try_outcome!(users
-            .filter(sub.eq(user_id))
-            .load::<User>(&conn)
-            .map_err(|_| ApiError::new("Couldn't load user from database".to_string()))
-            .or_forward(()));
+        let user_vec = try_outcome!(
+            conn.run(|c| users
+                .filter(sub.eq(user_id))
+                .load::<User>(c)
+                .map_err(|_| ApiError::new("Couldn't load user from database".to_string()))
+                .or_forward(()))
+                .await
+        );
 
         let user = try_outcome!(user_vec
             .first()
@@ -164,7 +164,7 @@ fn generate_session_key() -> String {
 pub(crate) async fn login(
     token: String,
     tokens: &State<UserSession>,
-    pool: &State<db::Pool>,
+    conn: DbConn,
     cookies: &CookieJar<'_>,
 ) -> Result<&'static str, ErrorResponse> {
     let client_id = "513324624986-fn538769dc89nlp075t083h03ihnjldi.apps.googleusercontent.com";
@@ -176,13 +176,6 @@ pub(crate) async fn login(
         )
     })?;
 
-    let conn = pool.get().map_err(|_| {
-        ErrorResponse::new(
-            Status { code: 500 },
-            "Couldn't connect to database".to_string(),
-        )
-    })?;
-
     let new_user = NewUser {
         sub: claims.sub.clone(),
         email: claims.email,
@@ -191,15 +184,18 @@ pub(crate) async fn login(
 
     use schema::users::dsl::*;
 
-    diesel::insert_into(users)
-        .values(&new_user)
-        .on_conflict(sub)
-        .do_update()
-        .set(&new_user)
-        .get_result::<User>(&conn)
-        .map_err(|_| {
-            ErrorResponse::new(Status { code: 500 }, "Couldn't update user".to_string())
-        })?;
+    conn.run(move |c| {
+        diesel::insert_into(users)
+            .values(&new_user)
+            .on_conflict(sub)
+            .do_update()
+            .set(&new_user)
+            .get_result::<User>(c)
+            .map_err(|_| {
+                ErrorResponse::new(Status { code: 500 }, "Couldn't update user".to_string())
+            })
+    })
+    .await?;
 
     let mut sessions = tokens.sessions.lock().map_err(|_| {
         ErrorResponse::new(

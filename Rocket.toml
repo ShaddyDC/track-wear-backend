@@ -1,2 +1,5 @@
 [default]
 temp_dir = "runtime/tmp"
+
+[default.databases.track_wear]
+url = "postgres://postgres:mysecretpassword@localhost:5432/track-wear"
