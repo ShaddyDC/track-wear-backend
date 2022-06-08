@@ -101,7 +101,7 @@ pub(crate) async fn get_clothes(
 ) -> Result<Json<Vec<ClothOut>>, ErrorResponse> {
     use schema::clothes::dsl::*;
 
-    let list = conn
+    let cloth_list = conn
         .run(move |c| {
             clothes
                 .filter(user_id.eq(user.id))
@@ -116,7 +116,8 @@ pub(crate) async fn get_clothes(
 
     let out = conn
         .run(|c| {
-            list.into_iter()
+            cloth_list
+                .into_iter()
                 .map(|cloth| {
                     let count = wears
                         .filter(cloth_id.eq(cloth.id))
@@ -152,7 +153,7 @@ pub(crate) async fn get_cloth(
 ) -> Result<Json<ClothOut>, ErrorResponse> {
     use schema::clothes::dsl::*;
 
-    let list = conn
+    let cloth_list = conn
         .run(move |c| {
             clothes
                 .filter(
@@ -167,7 +168,7 @@ pub(crate) async fn get_cloth(
         })
         .await?;
 
-    let cloth = list
+    let cloth = cloth_list
         .first()
         .map(|cloth| ClothOut {
             id: cloth.id,
@@ -205,7 +206,7 @@ pub(crate) async fn delete_cloth(
 ) -> Result<(), ErrorResponse> {
     use schema::clothes::dsl::*;
 
-    let list = conn
+    let cloth_list = conn
         .run(move |c| {
             clothes
                 .filter(user_id.eq(user.id).and(id.eq(cloth_id)))
@@ -216,15 +217,11 @@ pub(crate) async fn delete_cloth(
         })
         .await?;
 
-    let cloth_id = list.first().map(|c| c.id).ok_or_else(|| {
+    let cloth_id = cloth_list.first().map(|c| c.id).ok_or_else(|| {
         ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
     })?;
 
-    let filename = format!("runtime/images/{}", cloth_id);
-    match fs::remove_file(filename) {
-        Ok(_) => {}
-        Err(_) => {}
-    };
+    fs::remove_file(format!("runtime/images/{}", cloth_id)).ok();
 
     conn.run(move |c| {
         diesel::delete(clothes.filter(id.eq(cloth_id)))
@@ -251,14 +248,11 @@ pub(crate) async fn get_cloth_image(_name: UserOut, cloth_id: u32) -> Option<Fil
 pub(crate) async fn add_wear(cloth: i32, user: UserOut, conn: DbConn) -> Result<(), ErrorResponse> {
     use schema::clothes::dsl::*;
 
-    let list = conn
+    let cloth_list = conn
         .run(move |c| {
             clothes
-                .filter(
-                    user_id
-                        .eq(user.id)
-                        .and(schema::clothes::columns::id.eq(cloth)),
-                )
+                .filter(user_id.eq(user.id))
+                .filter(schema::clothes::columns::id.eq(cloth))
                 .load::<Cloth>(c)
                 .map_err(|_| {
                     ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string())
@@ -266,7 +260,7 @@ pub(crate) async fn add_wear(cloth: i32, user: UserOut, conn: DbConn) -> Result<
         })
         .await?;
 
-    list.first().ok_or_else(|| {
+    cloth_list.first().ok_or_else(|| {
         ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
     })?;
 
