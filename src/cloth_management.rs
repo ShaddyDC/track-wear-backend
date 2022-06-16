@@ -23,6 +23,12 @@ pub struct FormCloth<'a> {
     image: TempFile<'a>,
 }
 
+#[derive(FromForm)]
+pub struct FormEditCloth<'a> {
+    name: Option<String>,
+    image: Option<TempFile<'a>>,
+}
+
 #[derive(Insertable, AsChangeset)]
 #[table_name = "clothes"]
 struct NewCloth {
@@ -30,7 +36,8 @@ struct NewCloth {
     user_id: i32,
 }
 
-#[derive(Queryable, Debug)]
+#[derive(Queryable, Debug, Identifiable, AsChangeset)]
+#[table_name = "clothes"]
 pub struct Cloth {
     pub id: i32,
     pub user_id: i32,
@@ -49,6 +56,62 @@ pub struct ClothOut {
 #[table_name = "wears"]
 struct NewWear {
     cloth_id: i32,
+}
+
+#[post("/cloth/<cloth_id>/edit", data = "<form_cloth>")]
+pub(crate) async fn edit_cloth(
+    mut form_cloth: Form<FormEditCloth<'_>>,
+    cloth_id: i32,
+    user: UserOut,
+    conn: DbConn,
+    settings: &State<Settings>,
+) -> Result<Json<ClothOut>, ErrorResponse> {
+    use schema::clothes::dsl::*;
+
+    let mut cloth = conn
+        .run(move |c| {
+            clothes
+                .filter(user_id.eq(user.id).and(id.eq(cloth_id)))
+                .first::<Cloth>(c)
+        })
+        .await
+        .map_err(|_| ErrorResponse::new(Status { code: 500 }, "Couldn't get cloth".to_string()))?;
+    let uid = cloth.user_id;
+    let final_name = form_cloth
+        .name
+        .as_ref()
+        .unwrap_or(&cloth.cloth_name)
+        .clone();
+
+    if let Some(name) = &form_cloth.name {
+        cloth.cloth_name = name.clone();
+
+        conn.run(move |c| cloth.save_changes::<Cloth>(c))
+            .await
+            .map_err(|err| {
+                ErrorResponse::new(
+                    Status { code: 500 },
+                    format!("Couldn't update data: {}", err),
+                )
+            })?;
+    };
+
+    if let Some(file) = &mut form_cloth.image {
+        let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
+        file.persist_to(image_file).await.map_err(|err| {
+            ErrorResponse::new(
+                Status { code: 500 },
+                format!("Couldn't save image: {}", err),
+            )
+        })?;
+    }
+
+    Ok(Json(ClothOut {
+        id: cloth_id,
+        user_id: uid,
+        cloth_name: final_name,
+        count: 0,
+    }))
 }
 
 #[post("/create_cloth", data = "<form_cloth>")]
@@ -80,7 +143,6 @@ pub(crate) async fn create_cloth(
         .await?;
 
     let image_file = Path::new(&settings.image_folder).join(cloth.id.to_string());
-
     form_cloth
         .image
         .persist_to(image_file)

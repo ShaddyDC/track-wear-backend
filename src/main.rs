@@ -43,6 +43,7 @@ async fn rocket() -> _ {
                 crate::user_management::check_login,
                 crate::user_management::check_login_unauthorised,
                 crate::cloth_management::create_cloth,
+                crate::cloth_management::edit_cloth,
                 crate::cloth_management::get_clothes,
                 crate::cloth_management::get_cloth,
                 crate::cloth_management::delete_cloth,
