@@ -204,19 +204,18 @@ pub(crate) async fn get_cloth(
     Ok(Json(ClothOut { count, ..cloth }))
 }
 
-#[delete("/cloth/<cloth_id>")]
+#[delete("/cloth/<cid>")]
 pub(crate) async fn delete_cloth(
     user: UserOut,
-    cloth_id: i32,
+    cid: i32,
     conn: DbConn,
     settings: &State<Settings>,
 ) -> Result<(), ErrorResponse> {
-    use schema::clothes::dsl::*;
-
     let cloth_list = conn
         .run(move |c| {
+            use schema::clothes::dsl::*;
             clothes
-                .filter(user_id.eq(user.id).and(id.eq(cloth_id)))
+                .filter(user_id.eq(user.id).and(id.eq(cid)))
                 .load::<Cloth>(c)
                 .map_err(|_| {
                     ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string())
@@ -224,24 +223,36 @@ pub(crate) async fn delete_cloth(
         })
         .await?;
 
-    let cloth_id = cloth_list.first().map(|c| c.id).ok_or_else(|| {
+    let cid = cloth_list.first().map(|c| c.id).ok_or_else(|| {
         ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
     })?;
 
-    let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
-    fs::remove_file(image_file).ok();
-
+    let image_file = Path::new(&settings.image_folder).join(cid.to_string());
     conn.run(move |c| {
-        diesel::delete(clothes.filter(id.eq(cloth_id)))
-            .execute(c)
-            .map_err(|_| {
-                ErrorResponse::new(
-                    Status { code: 500 },
-                    "Couldn't delete database intry".to_string(),
-                )
+        c.build_transaction()
+            .read_write()
+            .run::<_, diesel::result::Error, _>(|| {
+                {
+                    use schema::wears::dsl::*;
+                    diesel::delete(wears.filter(cloth_id.eq(cid))).execute(c)
+                }?;
+                {
+                    use schema::clothes::dsl::*;
+                    diesel::delete(clothes.filter(id.eq(cid))).execute(c)
+                }?;
+
+                fs::remove_file(image_file).ok();
+
+                Ok(())
             })
     })
-    .await?;
+    .await
+    .map_err(|_| {
+        ErrorResponse::new(
+            Status { code: 500 },
+            "Couldn't delete database entries".to_string(),
+        )
+    })?;
 
     Ok(())
 }
