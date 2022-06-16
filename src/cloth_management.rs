@@ -98,7 +98,7 @@ pub(crate) async fn edit_cloth(
 
     if let Some(file) = &mut form_cloth.image {
         let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
-        file.persist_to(image_file).await.map_err(|err| {
+        file.copy_to(image_file).await.map_err(|err| {
             ErrorResponse::new(
                 Status { code: 500 },
                 format!("Couldn't save image: {}", err),
@@ -143,16 +143,12 @@ pub(crate) async fn create_cloth(
         .await?;
 
     let image_file = Path::new(&settings.image_folder).join(cloth.id.to_string());
-    form_cloth
-        .image
-        .persist_to(image_file)
-        .await
-        .map_err(|err| {
-            ErrorResponse::new(
-                Status { code: 500 },
-                format!("Couldn't save image: {}", err),
-            )
-        })?;
+    form_cloth.image.copy_to(image_file).await.map_err(|err| {
+        ErrorResponse::new(
+            Status { code: 500 },
+            format!("Couldn't save image: {}", err),
+        )
+    })?;
 
     Ok(Json(ClothOut {
         id: cloth.id,
