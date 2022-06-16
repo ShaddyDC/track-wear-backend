@@ -2,6 +2,7 @@ mod cloth_management;
 mod db;
 mod error;
 mod schema;
+mod settings;
 mod user_management;
 
 #[macro_use]
@@ -14,6 +15,7 @@ extern crate diesel_migrations;
 
 use db::{run_db_migrations, DbConn};
 use rocket::fairing::AdHoc;
+use settings::Settings;
 use user_management::UserSession;
 
 #[get("/")]
@@ -25,10 +27,13 @@ fn index() -> &'static str {
 async fn rocket() -> _ {
     dotenv::dotenv().ok();
 
+    let settings = Settings::new();
+
     rocket::build()
         .attach(DbConn::fairing())
         .attach(AdHoc::on_ignite("Run Migrations", run_db_migrations))
         .manage(UserSession::new())
+        .manage(settings)
         .mount("/", routes![index])
         .mount(
             "/api/v1/",

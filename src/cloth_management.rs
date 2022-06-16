@@ -1,17 +1,20 @@
 use std::fmt::Debug;
 use std::fs::{self, File};
+use std::path::Path;
 
 use crate::db::DbConn;
 use crate::error::ErrorResponse;
 use crate::schema;
 use crate::schema::clothes;
 use crate::schema::wears;
+use crate::settings::Settings;
 use crate::user_management::UserOut;
 use diesel::prelude::*;
 use rocket::form::Form;
 use rocket::fs::TempFile;
 use rocket::http::Status;
 use rocket::serde::json::Json;
+use rocket::State;
 use serde::Serialize;
 
 #[derive(FromForm)]
@@ -53,6 +56,7 @@ pub(crate) async fn create_cloth(
     mut form_cloth: Form<FormCloth<'_>>,
     user: UserOut,
     conn: DbConn,
+    settings: &State<Settings>,
 ) -> Result<Json<ClothOut>, ErrorResponse> {
     use schema::clothes::dsl::*;
 
@@ -75,9 +79,11 @@ pub(crate) async fn create_cloth(
         })
         .await?;
 
+    let image_file = Path::new(&settings.image_folder).join(cloth.id.to_string());
+
     form_cloth
         .image
-        .persist_to(format!("runtime/images/{}", cloth.id))
+        .persist_to(image_file)
         .await
         .map_err(|err| {
             ErrorResponse::new(
@@ -203,6 +209,7 @@ pub(crate) async fn delete_cloth(
     user: UserOut,
     cloth_id: i32,
     conn: DbConn,
+    settings: &State<Settings>,
 ) -> Result<(), ErrorResponse> {
     use schema::clothes::dsl::*;
 
@@ -221,7 +228,8 @@ pub(crate) async fn delete_cloth(
         ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
     })?;
 
-    fs::remove_file(format!("runtime/images/{}", cloth_id)).ok();
+    let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
+    fs::remove_file(image_file).ok();
 
     conn.run(move |c| {
         diesel::delete(clothes.filter(id.eq(cloth_id)))
@@ -239,9 +247,13 @@ pub(crate) async fn delete_cloth(
 }
 
 #[get("/cloth/<cloth_id>/image")]
-pub(crate) async fn get_cloth_image(_name: UserOut, cloth_id: u32) -> Option<File> {
-    let filename = format!("runtime/images/{}", cloth_id);
-    File::open(&filename).ok()
+pub(crate) async fn get_cloth_image(
+    _name: UserOut,
+    cloth_id: u32,
+    settings: &State<Settings>,
+) -> Option<File> {
+    let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
+    File::open(&image_file).ok()
 }
 
 #[post("/cloth/<cloth>/add_wear")]

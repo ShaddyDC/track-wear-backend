@@ -7,6 +7,7 @@ use crate::db::DbConn;
 use crate::error::{ApiError, ErrorResponse};
 use crate::schema;
 use crate::schema::users;
+use crate::settings::Settings;
 use diesel::prelude::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -166,9 +167,9 @@ pub(crate) async fn login(
     tokens: &State<UserSession>,
     conn: DbConn,
     cookies: &CookieJar<'_>,
+    settings: &State<Settings>,
 ) -> Result<&'static str, ErrorResponse> {
-    let client_id = "513324624986-fn538769dc89nlp075t083h03ihnjldi.apps.googleusercontent.com";
-    let parser = jsonwebtoken_google::Parser::new(client_id);
+    let parser = jsonwebtoken_google::Parser::new(&settings.google_client_id);
     let claims = parser.parse::<TokenClaims>(&token).await.map_err(|_| {
         ErrorResponse::new(
             Status { code: 500 },
