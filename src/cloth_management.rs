@@ -143,12 +143,19 @@ pub(crate) async fn create_cloth(
         .await?;
 
     let image_file = Path::new(&settings.image_folder).join(cloth.id.to_string());
-    form_cloth.image.copy_to(image_file).await.map_err(|err| {
-        ErrorResponse::new(
+    if let Err(err) = form_cloth.image.copy_to(image_file).await {
+        // roll back db
+        // TODO Wrap this in transaction. As file copy is async, only possible when diesel is async
+        // https://github.com/diesel-rs/diesel/issues/399
+        conn.run(move |c| diesel::delete(&cloth).execute(c))
+            .await
+            .ok();
+
+        return Err(ErrorResponse::new(
             Status { code: 500 },
             format!("Couldn't save image: {}", err),
-        )
-    })?;
+        ));
+    }
 
     Ok(Json(ClothOut {
         id: cloth.id,
