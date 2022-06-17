@@ -44,6 +44,10 @@ pub(crate) async fn delete_item(
                     diesel::delete(uses.filter(item_id.eq(cid))).execute(c)
                 }?;
                 {
+                    use schema::item_inventory::dsl::*;
+                    diesel::delete(item_inventory.filter(item_id.eq(cid))).execute(c)
+                }?;
+                {
                     use schema::items::dsl::*;
                     diesel::delete(items.filter(id.eq(iid))).execute(c)
                 }?;

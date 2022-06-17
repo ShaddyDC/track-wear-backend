@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::api::item_management::get_item::ItemOut;
 use crate::api::item_management::models::Item;
+use crate::api::item_management::modify_inventory::NewInventory;
 use crate::api::user_management::models::UserLoggedIn;
 use crate::db::DbConn;
 use crate::error::ErrorResponse;
@@ -19,6 +20,7 @@ use rocket::State;
 pub struct FormItem<'a> {
     name: String,
     image: TempFile<'a>,
+    count: Option<i32>,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -41,20 +43,34 @@ pub(crate) async fn create_item(
         item_name: form_item.name.clone(),
         user_id: user.0.id,
     };
+    let movement = form_item.count.unwrap_or(1);
 
     let item = conn
         .run(move |c| {
-            diesel::insert_into(items)
-                .values(&new_item)
-                .get_result::<Item>(c)
-                .map_err(|err| {
-                    ErrorResponse::new(
-                        Status { code: 500 },
-                        format!("Couldn't update item: {}", err),
-                    )
-                })
+            c.transaction::<_, diesel::result::Error, _>(|| {
+                let item = diesel::insert_into(items)
+                    .values(&new_item)
+                    .get_result::<Item>(c)?;
+
+                let new_inventory = NewInventory {
+                    item_id: item.id,
+                    movement,
+                };
+
+                diesel::insert_into(schema::item_inventory::dsl::item_inventory)
+                    .values(&new_inventory)
+                    .execute(c)?;
+
+                Ok(item)
+            })
         })
-        .await?;
+        .await
+        .map_err(|err| {
+            ErrorResponse::new(
+                Status { code: 500 },
+                format!("Couldn't update item: {}", err),
+            )
+        })?;
 
     let image_file = Path::new(&settings.image_folder).join(item.id.to_string());
     if let Err(err) = form_item.image.copy_to(image_file).await {
