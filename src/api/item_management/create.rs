@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use crate::api::cloth_management::get_cloth::ClothOut;
-use crate::api::cloth_management::models::Cloth;
+use crate::api::item_management::get_item::ItemOut;
+use crate::api::item_management::models::Item;
 use crate::api::user_management::models::UserLoggedIn;
 use crate::db::DbConn;
 use crate::error::ErrorResponse;
 use crate::schema;
-use crate::schema::clothes;
+use crate::schema::items;
 use crate::settings::Settings;
 use diesel::prelude::*;
 use rocket::form::Form;
@@ -16,52 +16,52 @@ use rocket::serde::json::Json;
 use rocket::State;
 
 #[derive(FromForm)]
-pub struct FormCloth<'a> {
+pub struct FormItem<'a> {
     name: String,
     image: TempFile<'a>,
 }
 
 #[derive(Insertable, AsChangeset)]
-#[table_name = "clothes"]
-struct NewCloth {
-    cloth_name: String,
+#[table_name = "items"]
+struct NewItem {
+    item_name: String,
     user_id: i32,
 }
 
-#[post("/create_cloth", data = "<form_cloth>")]
-pub(crate) async fn create_cloth(
-    mut form_cloth: Form<FormCloth<'_>>,
+#[post("/create_item", data = "<form_item>")]
+pub(crate) async fn create_item(
+    mut form_item: Form<FormItem<'_>>,
     user: UserLoggedIn,
     conn: DbConn,
     settings: &State<Settings>,
-) -> Result<Json<ClothOut>, ErrorResponse> {
-    use schema::clothes::dsl::*;
+) -> Result<Json<ItemOut>, ErrorResponse> {
+    use schema::items::dsl::*;
 
-    let new_cloth = NewCloth {
-        cloth_name: form_cloth.name.clone(),
+    let new_item = NewItem {
+        item_name: form_item.name.clone(),
         user_id: user.0.id,
     };
 
-    let cloth = conn
+    let item = conn
         .run(move |c| {
-            diesel::insert_into(clothes)
-                .values(&new_cloth)
-                .get_result::<Cloth>(c)
+            diesel::insert_into(items)
+                .values(&new_item)
+                .get_result::<Item>(c)
                 .map_err(|err| {
                     ErrorResponse::new(
                         Status { code: 500 },
-                        format!("Couldn't update cloth: {}", err),
+                        format!("Couldn't update item: {}", err),
                     )
                 })
         })
         .await?;
 
-    let image_file = Path::new(&settings.image_folder).join(cloth.id.to_string());
-    if let Err(err) = form_cloth.image.copy_to(image_file).await {
+    let image_file = Path::new(&settings.image_folder).join(item.id.to_string());
+    if let Err(err) = form_item.image.copy_to(image_file).await {
         // roll back db
         // TODO Wrap this in transaction. As file copy is async, only possible when diesel is async
         // https://github.com/diesel-rs/diesel/issues/399
-        conn.run(move |c| diesel::delete(&cloth).execute(c))
+        conn.run(move |c| diesel::delete(&item).execute(c))
             .await
             .ok();
 
@@ -71,10 +71,10 @@ pub(crate) async fn create_cloth(
         ));
     }
 
-    Ok(Json(ClothOut {
-        id: cloth.id,
-        user_id: cloth.user_id,
-        cloth_name: cloth.cloth_name,
+    Ok(Json(ItemOut {
+        id: item.id,
+        user_id: item.user_id,
+        item_name: item.item_name,
         count: 0,
     }))
 }

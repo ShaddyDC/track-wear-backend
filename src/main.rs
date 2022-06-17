@@ -12,7 +12,7 @@ extern crate dotenv;
 #[macro_use]
 extern crate diesel_migrations;
 
-use crate::api::cloth_management::{add_wear, create, delete, edit, get_cloth, list};
+use crate::api::item_management::{add_use, create, delete, edit, get_item, list};
 use crate::api::user_management::login;
 use api::user_management::sessions::UserSession;
 use db::{run_db_migrations, DbConn};
@@ -43,13 +43,13 @@ async fn rocket() -> _ {
                 login::login,
                 login::check_login,
                 login::check_login_unauthorised,
-                create::create_cloth,
-                edit::edit_cloth,
-                list::get_clothes,
-                get_cloth::get_cloth,
-                delete::delete_cloth,
-                get_cloth::get_cloth_image,
-                add_wear::add_wear,
+                create::create_item,
+                edit::edit_item,
+                list::get_items,
+                get_item::get_item,
+                delete::delete_item,
+                get_item::get_item_image,
+                add_use::add_use,
             ],
         )
 }

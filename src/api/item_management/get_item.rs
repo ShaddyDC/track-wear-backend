@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::path::Path;
 
-use crate::api::cloth_management::models::Cloth;
+use crate::api::item_management::models::Item;
 use crate::api::user_management::models::UserLoggedIn;
 use crate::db::DbConn;
 use crate::error::ErrorResponse;
@@ -14,81 +14,80 @@ use rocket::State;
 use serde::Serialize;
 
 #[derive(Serialize)]
-pub struct ClothOut {
+pub struct ItemOut {
     pub id: i32,
     pub user_id: i32,
-    pub cloth_name: String,
+    pub item_name: String,
     pub count: i32,
 }
 
-#[get("/cloth/<cloth>")]
-pub(crate) async fn get_cloth(
+#[get("/item/<item>")]
+pub(crate) async fn get_item(
     user: UserLoggedIn,
-    cloth: i32,
+    item: i32,
     conn: DbConn,
-) -> Result<Json<ClothOut>, ErrorResponse> {
-    use schema::clothes::dsl::*;
+) -> Result<Json<ItemOut>, ErrorResponse> {
+    use schema::items::dsl::*;
 
-    let cloth_list = conn
+    let item_list = conn
         .run(move |c| {
-            clothes
+            items
                 .filter(
                     user_id
                         .eq(user.0.id)
-                        .and(schema::clothes::columns::id.eq(cloth)),
+                        .and(schema::items::columns::id.eq(item)),
                 )
-                .load::<Cloth>(c)
+                .load::<Item>(c)
                 .map_err(|_| {
-                    ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string())
+                    ErrorResponse::new(Status { code: 500 }, "Couldn't load item".to_string())
                 })
         })
         .await?;
 
-    let cloth = cloth_list
+    let item = item_list
         .first()
-        .map(|cloth| ClothOut {
-            id: cloth.id,
-            user_id: cloth.user_id,
-            cloth_name: cloth.cloth_name.clone(),
+        .map(|first| ItemOut {
+            id: first.id,
+            user_id: first.user_id,
+            item_name: first.item_name.clone(),
             count: 0,
         })
         .ok_or_else(|| {
-            ErrorResponse::new(Status { code: 404 }, "Couldn't load cloth".to_string())
+            ErrorResponse::new(Status { code: 404 }, "Couldn't load item".to_string())
         })?;
 
-    use schema::wears::dsl::*;
+    use schema::uses::dsl::*;
 
     let count = conn
         .run(move |c| {
-            wears
-                .filter(cloth_id.eq(cloth.id))
+            uses.filter(item_id.eq(item.id))
                 .count()
                 .get_result(c)
                 .map(|val: i64| val as i32)
                 .map_err(|_| {
-                    ErrorResponse::new(Status { code: 404 }, "Couldn't get wear count".to_string())
+                    ErrorResponse::new(Status { code: 404 }, "Couldn't get use count".to_string())
                 })
         })
         .await?;
 
-    Ok(Json(ClothOut { count, ..cloth }))
+    Ok(Json(ItemOut { count, ..item }))
 }
 
-#[get("/cloth/<cloth>/image")]
-pub(crate) async fn get_cloth_image(
+#[get("/item/<item>/image")]
+pub(crate) async fn get_item_image(
     user: UserLoggedIn,
-    cloth: i32,
+    item: i32,
     settings: &State<Settings>,
     conn: DbConn,
 ) -> Result<Option<File>, ErrorResponse> {
-    use schema::clothes::dsl::*;
+    use schema::items::dsl::*;
 
     let image = conn
         .run(move |c| {
-            clothes
-                .filter(user_id.eq(user.0.id).and(id.eq(cloth)))
+            items
+                .filter(user_id.eq(user.0.id).and(id.eq(item)))
                 .limit(1)
-                .load::<Cloth>(c)
+                .load::<Item>(c)
                 .map_err(|_| {
                     ErrorResponse::new(Status { code: 500 }, "Couldn't access database".to_string())
                 })
@@ -96,7 +95,7 @@ pub(crate) async fn get_cloth_image(
         .await?
         .first()
         .and_then(|_| {
-            let image_file = Path::new(&settings.image_folder).join(cloth.to_string());
+            let image_file = Path::new(&settings.image_folder).join(item.to_string());
             File::open(&image_file).ok()
         });
 

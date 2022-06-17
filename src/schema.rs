@@ -1,8 +1,8 @@
 table! {
-    clothes (id) {
+    items (id) {
         id -> Int4,
         user_id -> Int4,
-        cloth_name -> Varchar,
+        item_name -> Varchar,
     }
 }
 
@@ -16,18 +16,14 @@ table! {
 }
 
 table! {
-    wears (id) {
+    uses (id) {
         id -> Int4,
-        cloth_id -> Int4,
+        item_id -> Int4,
         date -> Date,
     }
 }
 
-joinable!(clothes -> users (user_id));
-joinable!(wears -> clothes (cloth_id));
+joinable!(items -> users (user_id));
+joinable!(uses -> items (item_id));
 
-allow_tables_to_appear_in_same_query!(
-    clothes,
-    users,
-    wears,
-);
+allow_tables_to_appear_in_same_query!(items, users, uses,);

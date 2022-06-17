@@ -1,5 +1,5 @@
-use crate::api::cloth_management::get_cloth::ClothOut;
-use crate::api::cloth_management::models::Cloth;
+use crate::api::item_management::get_item::ItemOut;
+use crate::api::item_management::models::Item;
 use crate::api::user_management::models::UserLoggedIn;
 use crate::db::DbConn;
 use crate::error::ErrorResponse;
@@ -8,12 +8,12 @@ use diesel::prelude::*;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 
-#[get("/clothes")]
-pub(crate) async fn get_clothes(
+#[get("/items")]
+pub(crate) async fn get_items(
     user: UserLoggedIn,
     conn: DbConn,
-) -> Result<Json<Vec<ClothOut>>, ErrorResponse> {
-    use schema::clothes::dsl::*;
+) -> Result<Json<Vec<ItemOut>>, ErrorResponse> {
+    use schema::items::dsl::*;
 
     // Switch when diesel 2 is supported in Rocket
     // https://github.com/SergioBenitez/Rocket/issues/2209
@@ -22,43 +22,43 @@ pub(crate) async fn get_clothes(
     // use crate::schema::*;
     // use diesel::dsl::count;
     //
-    // let cloth_list = conn
+    // let item_list = conn
     //     .run(move |c| {
-    //         clothes::table
-    //             .filter(clothes::user_id.eq(user.id))
-    //             .left_join(wears::table)
-    //             .group_by(clothes::id)
+    //         items::table
+    //             .filter(itemes::user_id.eq(user.id))
+    //             .left_join(uses::table)
+    //             .group_by(items::id)
     //             .select((
-    //                 (clothes::id, clothes::user_id, clothes::cloth_name),
-    //                 count(wears::id),
+    //                 (items::id, items::user_id, items::item_name),
+    //                 count(uses::id),
     //             ))
-    //             .load::<(Cloth, i64)>(c)
+    //             .load::<(item, i64)>(c)
     //             .map_err(|_| {
-    //                 ErrorResponse::new(Status { code: 500 }, "Couldn't load clothes".to_string())
+    //                 ErrorResponse::new(Status { code: 500 }, "Couldn't load items".to_string())
     //             })
     //     })
     //     .await;
 
-    let cloth_list = conn
+    let item_list = conn
         .run(move |c| {
-            clothes
+            items
                 .filter(user_id.eq(user.0.id))
-                .load::<Cloth>(c)
+                .load::<Item>(c)
                 .map_err(|_| {
-                    ErrorResponse::new(Status { code: 500 }, "Couldn't load clothes".to_string())
+                    ErrorResponse::new(Status { code: 500 }, "Couldn't load items".to_string())
                 })
         })
         .await?;
 
-    use schema::wears::dsl::*;
+    use schema::uses::dsl::*;
 
     let out = conn
         .run(|c| {
-            cloth_list
+            item_list
                 .into_iter()
-                .map(|cloth| {
-                    let count = wears
-                        .filter(cloth_id.eq(cloth.id))
+                .map(|item| {
+                    let count = uses
+                        .filter(item_id.eq(item.id))
                         .count()
                         .get_result(c)
                         .map(|val: i64| val as i32)
@@ -69,10 +69,10 @@ pub(crate) async fn get_clothes(
                             )
                         })?;
 
-                    Ok(ClothOut {
-                        id: cloth.id,
-                        user_id: cloth.user_id,
-                        cloth_name: cloth.cloth_name,
+                    Ok(ItemOut {
+                        id: item.id,
+                        user_id: item.user_id,
+                        item_name: item.item_name,
                         count,
                     })
                 })
