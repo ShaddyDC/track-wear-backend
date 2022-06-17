@@ -74,13 +74,31 @@ pub(crate) async fn get_cloth(
     Ok(Json(ClothOut { count, ..cloth }))
 }
 
-#[get("/cloth/<cloth_id>/image")]
+#[get("/cloth/<cloth>/image")]
 pub(crate) async fn get_cloth_image(
-    _name: UserLoggedIn,
-    cloth_id: u32,
+    user: UserLoggedIn,
+    cloth: i32,
     settings: &State<Settings>,
-) -> Option<File> {
-    // TODO access check
-    let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
-    File::open(&image_file).ok()
+    conn: DbConn,
+) -> Result<Option<File>, ErrorResponse> {
+    use schema::clothes::dsl::*;
+
+    let image = conn
+        .run(move |c| {
+            clothes
+                .filter(user_id.eq(user.0.id).and(id.eq(cloth)))
+                .limit(1)
+                .load::<Cloth>(c)
+                .map_err(|_| {
+                    ErrorResponse::new(Status { code: 500 }, "Couldn't access database".to_string())
+                })
+        })
+        .await?
+        .first()
+        .and_then(|_| {
+            let image_file = Path::new(&settings.image_folder).join(cloth.to_string());
+            File::open(&image_file).ok()
+        });
+
+    Ok(image)
 }
