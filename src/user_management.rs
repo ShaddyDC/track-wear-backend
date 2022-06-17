@@ -198,15 +198,18 @@ pub(crate) async fn login(
     })
     .await?;
 
-    let mut sessions = tokens.sessions.lock().map_err(|_| {
-        ErrorResponse::new(
-            Status { code: 500 },
-            "Couldn't update user session".to_string(),
-        )
-    })?;
     let session_key = generate_session_key();
 
-    sessions.insert(session_key.clone(), claims.sub);
+    tokens
+        .sessions
+        .lock()
+        .map_err(|_| {
+            ErrorResponse::new(
+                Status { code: 500 },
+                "Couldn't update user session".to_string(),
+            )
+        })?
+        .insert(session_key.clone(), claims.sub);
 
     let cookie = SessionCookie {
         session_key,
