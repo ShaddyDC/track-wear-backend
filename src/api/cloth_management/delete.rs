@@ -22,7 +22,7 @@ pub(crate) async fn delete_cloth(
         .run(move |c| {
             use schema::clothes::dsl::*;
             clothes
-                .filter(user_id.eq(user.id).and(id.eq(cid)))
+                .filter(user_id.eq(user.0.id).and(id.eq(cid)))
                 .load::<Cloth>(c)
                 .map_err(|_| {
                     ErrorResponse::new(Status { code: 500 }, "Couldn't load cloth".to_string())

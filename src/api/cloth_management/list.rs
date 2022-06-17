@@ -42,7 +42,7 @@ pub(crate) async fn get_clothes(
     let cloth_list = conn
         .run(move |c| {
             clothes
-                .filter(user_id.eq(user.id))
+                .filter(user_id.eq(user.0.id))
                 .load::<Cloth>(c)
                 .map_err(|_| {
                     ErrorResponse::new(Status { code: 500 }, "Couldn't load clothes".to_string())

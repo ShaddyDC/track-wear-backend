@@ -24,7 +24,7 @@ pub(crate) async fn add_wear(
     let cloth_list = conn
         .run(move |c| {
             clothes
-                .filter(user_id.eq(user.id))
+                .filter(user_id.eq(user.0.id))
                 .filter(schema::clothes::columns::id.eq(cloth))
                 .load::<Cloth>(c)
                 .map_err(|_| {

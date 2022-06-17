@@ -39,7 +39,7 @@ pub(crate) async fn create_cloth(
 
     let new_cloth = NewCloth {
         cloth_name: form_cloth.name.clone(),
-        user_id: user.id,
+        user_id: user.0.id,
     };
 
     let cloth = conn

@@ -33,7 +33,7 @@ pub(crate) async fn edit_cloth(
     let mut cloth = conn
         .run(move |c| {
             clothes
-                .filter(user_id.eq(user.id).and(id.eq(cloth_id)))
+                .filter(user_id.eq(user.0.id).and(id.eq(cloth_id)))
                 .first::<Cloth>(c)
         })
         .await

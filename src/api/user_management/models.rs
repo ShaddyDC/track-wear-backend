@@ -10,9 +10,11 @@ pub struct User {
 }
 
 #[derive(Serialize)]
-pub struct UserLoggedIn {
+pub struct UserOut {
     pub id: i32,
     pub sub: String,
     pub username: String,
     pub email: String,
 }
+
+pub(crate) struct UserLoggedIn(pub(crate) UserOut);

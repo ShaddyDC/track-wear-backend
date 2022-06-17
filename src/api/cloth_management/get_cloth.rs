@@ -34,7 +34,7 @@ pub(crate) async fn get_cloth(
             clothes
                 .filter(
                     user_id
-                        .eq(user.id)
+                        .eq(user.0.id)
                         .and(schema::clothes::columns::id.eq(cloth)),
                 )
                 .load::<Cloth>(c)
@@ -80,6 +80,7 @@ pub(crate) async fn get_cloth_image(
     cloth_id: u32,
     settings: &State<Settings>,
 ) -> Option<File> {
+    // TODO access check
     let image_file = Path::new(&settings.image_folder).join(cloth_id.to_string());
     File::open(&image_file).ok()
 }

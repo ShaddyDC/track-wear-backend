@@ -13,7 +13,7 @@ use rocket::outcome::{try_outcome, IntoOutcome};
 use rocket::request::{self, FromRequest, Outcome};
 use rocket::{Request, State};
 
-use super::models::UserLoggedIn;
+use super::models::{UserLoggedIn, UserOut};
 
 pub(crate) struct UserSession {
     pub(crate) sessions: Mutex<HashMap<String, String>>,
@@ -102,11 +102,11 @@ impl<'r> FromRequest<'r> for UserLoggedIn {
             .ok_or_else(|| { ApiError::new("User not in database".to_string()) })
             .or_forward(()));
 
-        Outcome::Success(UserLoggedIn {
+        Outcome::Success(UserLoggedIn(UserOut {
             id: user.id,
             sub: user.sub.clone(),
             username: user.username.clone(),
             email: user.email.clone(),
-        })
+        }))
     }
 }

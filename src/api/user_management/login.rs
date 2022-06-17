@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::time::SystemTime;
 
-use crate::api::user_management::models::{User, UserLoggedIn};
+use crate::api::user_management::models::{User, UserLoggedIn, UserOut};
 use crate::api::user_management::sessions::UserSession;
 use crate::db::DbConn;
 use crate::error::ErrorResponse;
@@ -39,8 +39,8 @@ pub(super) struct SessionCookie {
 }
 
 #[get("/check_login")]
-pub(crate) async fn check_login(user: UserLoggedIn) -> Json<UserLoggedIn> {
-    Json(user)
+pub(crate) async fn check_login(user: UserLoggedIn) -> Json<UserOut> {
+    Json(user.0)
 }
 
 #[get("/check_login", rank = 2)]
