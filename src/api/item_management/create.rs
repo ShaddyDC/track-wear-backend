@@ -77,9 +77,14 @@ pub(crate) async fn create_item(
         // roll back db
         // TODO Wrap this in transaction. As file copy is async, only possible when diesel is async
         // https://github.com/diesel-rs/diesel/issues/399
-        conn.run(move |c| diesel::delete(&item).execute(c))
-            .await
-            .ok();
+        conn.run(move |c| {
+            diesel::delete(schema::item_inventory::table)
+                .filter(schema::item_inventory::item_id.eq(item.id))
+                .execute(c)
+                .and_then(|_| diesel::delete(&item).execute(c))
+        })
+        .await
+        .ok();
 
         return Err(ErrorResponse::new(
             Status { code: 500 },
