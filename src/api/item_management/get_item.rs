@@ -27,16 +27,12 @@ pub(crate) async fn get_item(
     item: i32,
     conn: DbConn,
 ) -> Result<Json<ItemOut>, ErrorResponse> {
-    use schema::items::dsl::*;
-
     let item_list = conn
         .run(move |c| {
+            use schema::items::dsl::*;
+
             items
-                .filter(
-                    user_id
-                        .eq(user.0.id)
-                        .and(schema::items::columns::id.eq(item)),
-                )
+                .filter(user_id.eq(user.0.id).and(id.eq(item)))
                 .load::<Item>(c)
                 .map_err(|_| {
                     ErrorResponse::new(Status { code: 500 }, "Couldn't load item".to_string())
@@ -56,10 +52,10 @@ pub(crate) async fn get_item(
             ErrorResponse::new(Status { code: 404 }, "Couldn't load item".to_string())
         })?;
 
-    use schema::uses::dsl::*;
-
     let count = conn
         .run(move |c| {
+            use schema::uses::dsl::*;
+
             uses.filter(item_id.eq(item.id))
                 .count()
                 .get_result(c)
