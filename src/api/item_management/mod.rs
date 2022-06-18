@@ -1,8 +1,12 @@
+pub(crate) mod add_tag;
 pub(crate) mod add_use;
 pub(crate) mod create;
+pub(crate) mod create_tag;
 pub(crate) mod delete;
+pub(crate) mod delete_tag;
 pub(crate) mod edit;
 pub(crate) mod get_item;
 pub(crate) mod list;
 pub(crate) mod models;
 pub(crate) mod modify_inventory;
+pub(crate) mod remove_tag;

@@ -1,0 +1,14 @@
+CREATE TABLE tags (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    user_id INTEGER NOT NULL,
+    tag_name VARCHAR NOT NULL,
+    CONSTRAINT fk_users FOREIGN KEY(user_id) REFERENCES users(id)
+);
+CREATE TABLE item_tags(
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    item_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    UNIQUE(item_id, tag_id),
+    CONSTRAINT fk_items FOREIGN KEY(item_id) REFERENCES items(id),
+    CONSTRAINT fk_tags FOREIGN KEY(tag_id) REFERENCES tags(id)
+);

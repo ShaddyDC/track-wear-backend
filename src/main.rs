@@ -13,7 +13,8 @@ extern crate dotenv;
 extern crate diesel_migrations;
 
 use crate::api::item_management::{
-    add_use, create, delete, edit, get_item, list, modify_inventory,
+    add_tag, add_use, create, create_tag, delete, delete_tag, edit, get_item, list,
+    modify_inventory, remove_tag,
 };
 use crate::api::user_management::login;
 use api::user_management::sessions::UserSession;
@@ -53,6 +54,10 @@ async fn rocket() -> _ {
                 get_item::get_item_image,
                 add_use::add_use,
                 modify_inventory::modify_inventory,
+                create_tag::create_tag,
+                delete_tag::delete_tag,
+                add_tag::add_tag,
+                remove_tag::remove_tag,
             ],
         )
 }
