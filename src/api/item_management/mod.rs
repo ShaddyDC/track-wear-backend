@@ -6,6 +6,8 @@ pub(crate) mod delete;
 pub(crate) mod delete_tag;
 pub(crate) mod edit;
 pub(crate) mod get_item;
+pub(crate) mod get_item_tags;
+pub(crate) mod get_tags;
 pub(crate) mod list;
 pub(crate) mod models;
 pub(crate) mod modify_inventory;
